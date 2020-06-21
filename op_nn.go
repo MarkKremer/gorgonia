@@ -1227,7 +1227,7 @@ func (op *BatchNormOp) UsePreallocDo(prealloc Value, inputs ...Value) (retVal Va
 
 // SetTraining configure the op for training mode.
 // A call to this function implicitly calls the Reset() method
-func (op *BatchNormOp) SetTraining() { op.Reset(); op.training = true }
+func (op *BatchNormOp) SetTraining() { /*op.Reset();*/ op.training = true }
 
 // SetTesting configure the op for testing mode
 func (op *BatchNormOp) SetTesting() { op.training = false }

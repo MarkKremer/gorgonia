@@ -343,7 +343,6 @@ var binOpTests = []binOpTest{
 		newF32(-1.0),
 		scalarShape,
 	},
-
 	{
 		func(a *Node, b *Node) (*Node, error) {
 			return BatchedMatMul(a, b, false, false)
@@ -355,6 +354,18 @@ var binOpTests = []binOpTest{
 		tensor.New(tensor.WithBacking([]float64{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4})),
 		tensor.New(tensor.WithBacking([]float64{15, 18, 21, 24, 15, 18, 21, 24})),
 		tensor.Shape{2, 3, 1},
+	},
+	{
+		func(a *Node, b *Node) (*Node, error) {
+			return BatchedMatMul(b, a, true, true)
+		},
+		tensor.New(tensor.WithShape(2, 3, 4), tensor.WithBacking([]float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12})),
+		tensor.New(tensor.WithShape(2, 4, 1), tensor.WithBacking([]float64{1, 2, 3, 4, 1, 2, 3, 4})),
+
+		tensor.New(tensor.WithBacking([]float64{30, 70, 110, 30, 70, 110})),
+		tensor.New(tensor.WithBacking([]float64{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4})),
+		tensor.New(tensor.WithBacking([]float64{15, 18, 21, 24, 15, 18, 21, 24})),
+		tensor.Shape{2, 1, 3},
 	},
 }
 

@@ -1158,6 +1158,7 @@ func (op reshapeOp) Do(vals ...Value) (Value, error) {
 			}
 		}
 		if !val.Shape().Eq(op.from) {
+			// Why?
 			return nil, errors.Errorf("Shape mismatch. Input shape is %v. Expected %v", val.Shape(), op.from)
 		}
 

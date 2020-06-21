@@ -344,12 +344,12 @@ func MaxPool2D(x *Node, kernel tensor.Shape, pad, stride []int) (*Node, error) {
 		return nil, errors.Errorf("Expected kernel to have a shape of dimension 2")
 	}
 
-	if h-kh == 0 && ph == 0 {
+	if (h+2*ph) < kh {
 		// error
 		return nil, errors.New("Impossible height/kernel/pad combination")
 	}
 
-	if w-kw == 0 && pw == 0 {
+	if (w+2*pw) < kw {
 		// error
 		return nil, errors.New("Impossible width/kernel/pad combination")
 	}
@@ -435,10 +435,10 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 	if retVal, err = ApplyOp(op, x); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if retVal, err = HadamardProd(scale, retVal); err != nil {
+	if retVal, err = BroadcastHadamardProd(scale, retVal, []byte{0}, []byte{}); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	retVal, err = Add(retVal, bias)
+	retVal, err = BroadcastAdd(retVal, bias, []byte{}, []byte{0})
 
 	return retVal, scale, bias, op, err
 }
