@@ -1117,7 +1117,7 @@ func (op *clampOp) String() string   { return fmt.Sprintf("ConstClamp{%f, %f}()"
 //
 // Normalization is done as:
 // 	γ(x - μ) / σ + β
-// γ is the scaling factor and β is the offset factor. These are created by BatchNorm()
+// γ is the scaling factor and β is the offset factor. These are parameters for BatchNorm()
 type BatchNormOp struct {
 	momentum float64 // momentum for the moving average
 	epsilon  float64 // small variance to be added to avoid dividing by 0
@@ -1127,6 +1127,9 @@ type BatchNormOp struct {
 
 	// scratch space
 	meanTmp, varianceTmp, tmpSpace, xNorm                *tensor.Dense
+	// batchSumMultiplier and spatialSumMultiplier are matrices with
+	// only ones in them. They make it possible to broadcast or sum
+	// the means and variances using the BLAS functions.
 	batchSumMultiplier, numByChans, spatialSumMultiplier *tensor.Dense
 
 	// training? if training then update movingMean and movingVar
@@ -1296,12 +1299,16 @@ func (op *BatchNormOp) f64s(input, output *tensor.Dense) (err error) {
 	} else {
 		// compute mean
 		alpha := 1.0 / float64(n*spatialDim)
+		// NBC = alpha * INPUT_F64S * SSM + 0 * NBC (multiply by alpha and sum spatial dims)
 		whichblas.Dgemv(blas.NoTrans, nc, spatialDim, alpha, inputF64s, spatialDim, ssm, 1, 0, nbc, 1)
+		// MEAN_TMP = 1 * NBC^T * BSM + 0 * MEAN_TMP (sum batch dim)
 		whichblas.Dgemv(blas.Trans, n, channels, 1, nbc, channels, bsm, 1, 0, meanTmp, 1)
 	}
 
 	// subtract mean
+	// NBC = 1 * BSM * MEAN_TMP + 0 * NBC (broadcast means over batch dim)
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, n, channels, 1, 1, bsm, 1, meanTmp, channels, 0, nbc, channels)
+	// OUTPUT_F64S = -1 * NBC * ssm + 1 * OUTPUT_F64S (broadcast means over spatial dim and subtract it from the output)
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, nc, spatialDim, 1, -1, nbc, 1, ssm, spatialDim, 1, outputF64s, spatialDim)
 
 	if op.training {
@@ -1334,7 +1341,9 @@ func (op *BatchNormOp) f64s(input, output *tensor.Dense) (err error) {
 	vecf64.Sqrt(varianceTmp)
 
 	// replicate variance to inputsize
+	// NBC = 1 * BSM * VARIANCE_TEMP + 0 * NBC
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, n, channels, 1, 1, bsm, 1, varianceTmp, channels, 0, nbc, channels)
+	// TMP = 1 * NBC * SSM + 0 * TMP
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, nc, spatialDim, 1, 1, nbc, 1, ssm, spatialDim, 0, tmp, spatialDim)
 	vecf64.Div(outputF64s, tmp)
 	copy(op.xNorm.Float64s(), outputF64s) // caching
@@ -1505,7 +1514,7 @@ func (op *batchnormDiffOp) f64s(input, inGrad, outGrad *tensor.Dense) (err error
 
 	if !op.training {
 		copy(ig, og)
-		vecf64.Div(og, tmp)
+		vecf64.Div(og, tmp) // TODO: should be Div(ig, tmp) ???
 		return nil
 	}
 
@@ -1525,6 +1534,8 @@ func (op *batchnormDiffOp) f64s(input, inGrad, outGrad *tensor.Dense) (err error
 	// along all dimensions except the channels dimension.  In the above
 	// equation, the operations allow for expansion (i.e. broadcast) along all
 	// dimensions except the channels dimension where required.
+	//
+	// https://kevinzakka.github.io/2016/09/14/batch_normalization/
 
 	// sum(dE/dY ⋅ Y)
 	copy(ig, out)
@@ -1539,21 +1550,21 @@ func (op *batchnormDiffOp) f64s(input, inGrad, outGrad *tensor.Dense) (err error
 	// sum(dE/dY ⋅ Y) ⋅ Y
 	vecf64.Mul(ig, out)
 
-	// sum(dE/dY)-sum(dE/dY ⋅ Y) ⋅ Y
+	// sum(dE/dY)
 	whichblas.Dgemv(blas.NoTrans, nc, spatialDim, 1, og, spatialDim, ssm, 1, 0, nbc, 1)
 	whichblas.Dgemv(blas.Trans, n, channels, 1, nbc, channels, bsm, 1, 0, meanTmp, 1)
 
 	// reshape (broadcast) the above to make
-	// sum(dE/dY)-sum(dE/dY ⋅ Y) ⋅ Y
+	// sum(dE/dY)+sum(dE/dY ⋅ Y) ⋅ Y
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, n, channels, 1, 1, bsm, 1, meanTmp, channels, 0, nbc, channels)
 	whichblas.Dgemm(blas.NoTrans, blas.NoTrans, nc, spatialDim, 1, 1, nbc, 1, ssm, spatialDim, 1, ig, spatialDim)
 
 	// dE/dY - mean(dE/dY)-mean(dE/dY ⋅ Y) ⋅ Y
 	beta := (-1.0 / float64(nc))
-	vecf64.Scale(ig, beta)
+	vecf64.Scale(ig, beta) // TODO: can be done in the previous step?
 	vecf64.Add(ig, og)
 
-	// note: temp_ still contains sqrt(var(X)+eps), computed during the forward
+	// note: tmp still contains sqrt(var(X)+eps), computed during the forward
 	// pass.
 	vecf64.Div(ig, tmp)
 	return nil
@@ -1621,7 +1632,7 @@ func (op *batchnormDiffOp) f32s(input, inGrad, outGrad *tensor.Dense) (err error
 	vecf32.Scale(ig, beta)
 	vecf32.Add(ig, og)
 
-	// note: temp_ still contains sqrt(var(X)+eps), computed during the forward
+	// note: tmp still contains sqrt(var(X)+eps), computed during the forward
 	// pass.
 	vecf32.Div(ig, tmp)
 	return nil

@@ -368,10 +368,15 @@ func MaxPool1D(x *Node, kernel, pad, stride int) (*Node, error) {
 // BatchNorm applies a batchnormalization. This operator can be used in forward pass or for training.
 // In an evaluation only, the "op" output can be discared.
 // In training phase, γ, β can be discarded and the op should be used.
-func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β *Node, op *BatchNormOp, err error) {
+
+// BatchNorm applies batch normalization in a way that obeys the convolutional property. The input node is
+// expected to have a shape of (batches, channels, spatial dims...). The operator can be used for inference
+// and for training.
+// scale and bias must be a vector of shape (channels).
+func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal *Node, op *BatchNormOp, err error) {
 	dt, err := dtypeOf(x.Type())
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 	batches := x.Shape()[0]
 	channels := x.Shape()[1]
@@ -379,13 +384,12 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 
 	mean := tensor.New(tensor.Of(dt), tensor.WithShape(channels))
 	variance := tensor.New(tensor.Of(dt), tensor.WithShape(channels))
-	ma := tensor.New(tensor.Of(dt), tensor.WithShape(1))
+	ma := tensor.New(tensor.Of(dt), tensor.WithShape(1)) // Moving average scale factor // TODO: shouldn't this be 0?
 
 	meanTmp := tensor.New(tensor.Of(dt), tensor.WithShape(channels))
 	varianceTmp := tensor.New(tensor.Of(dt), tensor.WithShape(channels))
 	tmp := tensor.New(tensor.Of(dt), tensor.WithShape(x.Shape().Clone()...))
 	xNorm := tensor.New(tensor.Of(dt), tensor.WithShape(x.Shape().Clone()...))
-	batchSumMultiplier := tensor.New(tensor.Of(dt), tensor.WithShape(batches))
 
 	var uno interface{}
 	switch dt {
@@ -396,12 +400,14 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 	}
 	spatialSumMultiplier := tensor.New(tensor.Of(dt), tensor.WithShape(spatialDim))
 	if err = spatialSumMultiplier.Memset(uno); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
-	numByChans := tensor.New(tensor.Of(dt), tensor.WithShape(channels*batches))
+	numByChans := tensor.New(tensor.Of(dt), tensor.WithShape(channels*batches)) // Zeroes
+
+	batchSumMultiplier := tensor.New(tensor.Of(dt), tensor.WithShape(batches))
 	if err = batchSumMultiplier.Memset(uno); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	op = &BatchNormOp{
@@ -422,25 +428,30 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 
 		training: true,
 	}
-	g := x.Graph()
-	dims := x.Shape().Dims()
-
-	if scale == nil {
-		scale = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_γ"), WithInit(GlorotN(1.0)))
-	}
-	if bias == nil {
-		bias = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_β"), WithInit(GlorotN(1.0)))
-	}
 
 	if retVal, err = ApplyOp(op, x); err != nil {
-		return nil, nil, nil, nil, err
+		return nil,  nil, err
 	}
-	if retVal, err = HadamardProd(scale, retVal); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	retVal, err = Add(retVal, bias)
 
-	return retVal, scale, bias, op, err
+	//g := x.Graph()
+	//dims := x.Shape().Dims()
+
+	//if scale == nil {
+	//	scale = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_γ"), WithInit(Ones()))
+	//}
+	//if bias == nil {
+	//	bias = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_β"), WithInit(Zeroes()))
+	//}
+	if scale != nil {
+		if retVal, err = HadamardProd(scale, retVal); err != nil {
+			return nil, nil, err
+		}
+	}
+	if bias != nil {
+		retVal, err = Add(retVal, bias)
+	}
+
+	return retVal, op, err
 }
 
 // GlobalAveragePool2D consumes an input tensor X and applies average pooling across the values in the same channel.

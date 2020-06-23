@@ -280,6 +280,7 @@ func TestMaxPool2D(t *testing.T) {
 
 func TestBatchNorm_F64(t *testing.T) {
 	g := NewGraph()
+	// TODO: Do you still get a mean of 0 an variance of 1 if the input isn't a gaussian?
 	x := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Gaussian(0, 1)), WithName("x"))
 	scale := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Ones()), WithName("scale"))
 	bias := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Zeroes()), WithName("bias"))
