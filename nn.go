@@ -423,8 +423,9 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 		varianceTmp:          varianceTmp,
 		tmpSpace:             tmp,
 		xNorm:                xNorm,
-		batchSumMultiplier:   batchSumMultiplier,
 		numByChans:           numByChans,
+
+		batchSumMultiplier:   batchSumMultiplier,
 		spatialSumMultiplier: spatialSumMultiplier,
 
 		training: true,
