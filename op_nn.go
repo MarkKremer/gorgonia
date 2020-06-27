@@ -1236,23 +1236,6 @@ func (op *BatchNormOp) SetTesting() { op.training = false }
 
 // Reset the operator by zeroing the internal scratch spaces
 func (op *BatchNormOp) Reset() error {
-	dt := op.scaleFactor.Dtype()
-	var uno interface{}
-	switch dt {
-	case Float64:
-		uno = float64(1)
-	case Float32:
-		uno = float32(1)
-	}
-
-	if err := op.spatialSumMultiplier.Memset(uno); err != nil {
-		return err
-	}
-
-	if err := op.batchSumMultiplier.Memset(uno); err != nil {
-		return err
-	}
-
 	op.mean.Zero()
 	op.variance.Zero()
 	op.scaleFactor.Zero()
