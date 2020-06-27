@@ -1505,7 +1505,7 @@ func (op *batchnormDiffOp) f64s(input, inGrad, outGrad *tensor.Dense) (err error
 
 	if !op.training {
 		copy(ig, og)
-		vecf64.Div(og, tmp)
+		vecf64.Div(ig, tmp)
 		return nil
 	}
 
@@ -1573,7 +1573,7 @@ func (op *batchnormDiffOp) f32s(input, inGrad, outGrad *tensor.Dense) (err error
 
 	if !op.training {
 		copy(ig, og)
-		vecf32.Div(og, tmp)
+		vecf32.Div(ig, tmp)
 		return nil
 	}
 
