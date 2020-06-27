@@ -1122,14 +1122,17 @@ type BatchNormOp struct {
 	momentum float64 // momentum for the moving average
 	epsilon  float64 // small variance to be added to avoid dividing by 0
 
-	// learnables
-	mean, variance, ma *tensor.Dense
+	// moving averages
+	mean, variance, scaleFactor *tensor.Dense
 
 	// scratch space
-	meanTmp, varianceTmp, tmpSpace, xNorm                *tensor.Dense
-	batchSumMultiplier, numByChans, spatialSumMultiplier *tensor.Dense
+	meanTmp, varianceTmp, tmpSpace, xNorm, numByChans *tensor.Dense
 
-	// training? if training then update movingMean and movingVar
+	// matrices containing only ones, used for broadcasting and summing
+	// the means and variances using the BLAS functions
+	batchSumMultiplier, spatialSumMultiplier *tensor.Dense
+
+	// training? if training then update moving means and variances
 	training bool
 }
 
@@ -1234,7 +1237,7 @@ func (op *BatchNormOp) SetTesting() { op.training = false }
 
 // Reset the operator by zeroing the internals scratch spaces
 func (op *BatchNormOp) Reset() error {
-	dt := op.ma.Dtype()
+	dt := op.scaleFactor.Dtype()
 	var uno interface{}
 	switch dt {
 	case Float64:
@@ -1253,7 +1256,7 @@ func (op *BatchNormOp) Reset() error {
 
 	op.mean.Zero()
 	op.variance.Zero()
-	op.ma.Zero()
+	op.scaleFactor.Zero()
 	op.meanTmp.Zero()
 	op.varianceTmp.Zero()
 	op.tmpSpace.Zero()
@@ -1286,7 +1289,7 @@ func (op *BatchNormOp) f64s(input, output *tensor.Dense) (err error) {
 	if !op.training {
 		// use stored mean/variance estimates
 		scaleFactor := float64(1)
-		if fst := op.ma.Float64s()[0]; fst != 1 {
+		if fst := op.scaleFactor.Float64s()[0]; fst != 1 {
 			scaleFactor = fst
 		}
 		copy(meanTmp, mean)
@@ -1313,8 +1316,8 @@ func (op *BatchNormOp) f64s(input, output *tensor.Dense) (err error) {
 		whichblas.Dgemv(blas.Trans, n, channels, 1.0, nbc, channels, bsm, 1, 0, varianceTmp, 1) // E((X_EX)²)
 
 		// compute and save moving average
-		op.ma.Float64s()[0] *= momentum
-		op.ma.Float64s()[0]++
+		op.scaleFactor.Float64s()[0] *= momentum
+		op.scaleFactor.Float64s()[0]++
 
 		// TODO: write axpby for gonum
 		whichblas.Dscal(len(mean), momentum, mean, 1)
@@ -1367,7 +1370,7 @@ func (op *BatchNormOp) f32s(input, output *tensor.Dense) (err error) {
 	if !op.training {
 		// use stored mean/variance estimates
 		scaleFactor := float32(1)
-		if fst := op.ma.Float32s()[0]; fst != 1 {
+		if fst := op.scaleFactor.Float32s()[0]; fst != 1 {
 			scaleFactor = fst
 		}
 		copy(meanTmp, mean)
@@ -1394,8 +1397,8 @@ func (op *BatchNormOp) f32s(input, output *tensor.Dense) (err error) {
 		whichblas.Sgemv(blas.Trans, n, channels, 1.0, nbc, channels, bsm, 1, 0, varianceTmp, 1) // E((X_EX)²)
 
 		// compute and save moving average
-		op.ma.Float32s()[0] *= momentum
-		op.ma.Float32s()[0]++
+		op.scaleFactor.Float32s()[0] *= momentum
+		op.scaleFactor.Float32s()[0]++
 
 		// TODO: write axpby for gonum
 		whichblas.Sscal(len(mean), momentum, mean, 1)
@@ -1553,7 +1556,7 @@ func (op *batchnormDiffOp) f64s(input, inGrad, outGrad *tensor.Dense) (err error
 	vecf64.Scale(ig, beta)
 	vecf64.Add(ig, og)
 
-	// note: temp_ still contains sqrt(var(X)+eps), computed during the forward
+	// note: tmp still contains sqrt(var(X)+eps), computed during the forward
 	// pass.
 	vecf64.Div(ig, tmp)
 	return nil
@@ -1621,7 +1624,7 @@ func (op *batchnormDiffOp) f32s(input, inGrad, outGrad *tensor.Dense) (err error
 	vecf32.Scale(ig, beta)
 	vecf32.Add(ig, og)
 
-	// note: temp_ still contains sqrt(var(X)+eps), computed during the forward
+	// note: tmp still contains sqrt(var(X)+eps), computed during the forward
 	// pass.
 	vecf32.Div(ig, tmp)
 	return nil
