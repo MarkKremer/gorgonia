@@ -281,8 +281,8 @@ func TestMaxPool2D(t *testing.T) {
 func TestBatchNorm_F64(t *testing.T) {
 	g := NewGraph()
 	x := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Gaussian(0, 1)), WithName("x"))
-	scale := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Ones()), WithName("scale"))
-	bias := NewTensor(g, Float64, 4, WithShape(5, 2, 3, 4), WithInit(Zeroes()), WithName("bias"))
+	scale := NewTensor(g, Float64, 4, WithShape(1, 2, 1, 1), WithInit(Ones()), WithName("scale"))
+	bias := NewTensor(g, Float64, 4, WithShape(1, 2, 1, 1), WithInit(Zeroes()), WithName("bias"))
 	y, _, _, op, err := BatchNorm(x, scale, bias, 0.9, 1e-5)
 	if err != nil {
 		t.Fatal(err)
@@ -374,8 +374,8 @@ func TestBatchNorm_F64(t *testing.T) {
 func TestBatchNorm_F32(t *testing.T) {
 	g := NewGraph()
 	x := NewTensor(g, Float32, 4, WithShape(5, 2, 3, 4), WithInit(Gaussian(0, 1)))
-	scale := NewTensor(g, Float32, 4, WithShape(5, 2, 3, 4), WithInit(Ones()), WithName("scale"))
-	bias := NewTensor(g, Float32, 4, WithShape(5, 2, 3, 4), WithInit(Zeroes()), WithName("bias"))
+	scale := NewTensor(g, Float32, 4, WithShape(1, 2, 1, 1), WithInit(Ones()), WithName("scale"))
+	bias := NewTensor(g, Float32, 4, WithShape(1, 2, 1, 1), WithInit(Zeroes()), WithName("bias"))
 	y, _, _, op, err := BatchNorm(x, scale, bias, 0.9, 1e-5)
 	if err != nil {
 		t.Fatal(err)

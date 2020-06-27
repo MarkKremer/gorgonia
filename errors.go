@@ -6,6 +6,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	atleastDims   = "Node has to be at least %d dimensions"
+	shapeMismatch = "Shape mismatch. Expected %v. Got %v"
+)
+
 // NoOpError is an error returned when an operation does nothing.
 type NoOpError interface {
 	NoOp() bool

@@ -365,13 +365,20 @@ func MaxPool1D(x *Node, kernel, pad, stride int) (*Node, error) {
 	return MaxPool2D(x, tensor.Shape{1, kernel}, []int{0, pad}, []int{1, stride})
 }
 
-// BatchNorm applies a batchnormalization. This operator can be used in forward pass or for training.
-// In an evaluation only, the "op" output can be discared.
-// In training phase, γ, β can be discarded and the op should be used.
+// BatchNorm applies batch normalization for each channel. x is expected to have a shape of
+// (batches, channels, spatial dims...). If provided, scale and bias should have a shape
+// of (1, channels, 1...) so they can be broadcasted. If the scale and bias are nil,
+// BatchNorm will make them and return them as γ and β.
+//
+// BatchNormOp keeps track of a running mean and variance. These are updated during training
+// and used during inference. The op can be used to switch between these modes.
 func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β *Node, op *BatchNormOp, err error) {
 	dt, err := dtypeOf(x.Type())
 	if err != nil {
 		return nil, nil, nil, nil, err
+	}
+	if x.Dims() < 2 {
+		return nil, nil, nil, nil, errors.Wrap(errors.Errorf(atleastDims, 2), "invalid input")
 	}
 	batches := x.Shape()[0]
 	channels := x.Shape()[1]
@@ -423,22 +430,45 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 		training: true,
 	}
 	g := x.Graph()
-	dims := x.Shape().Dims()
+	dims := x.Dims()
+
+	const channelDim = 1
+	s := make(tensor.Shape, x.Dims())
+	for i := range s {
+		s[i] = 1
+	}
+	s[channelDim] = channels
 
 	if scale == nil {
-		scale = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_γ"), WithInit(GlorotN(1.0)))
+		scale = NewTensor(g, dt, dims, WithShape(s...), WithName(x.Name()+"_γ"), WithInit(Ones()))
+	} else {
+		if !scale.Shape().Eq(s) {
+			return nil, nil, nil, nil, errors.Wrap(errors.Errorf(shapeMismatch, s, scale.Shape()), "invalid scale")
+		}
 	}
 	if bias == nil {
-		bias = NewTensor(g, dt, dims, WithShape(x.Shape().Clone()...), WithName(x.Name()+"_β"), WithInit(GlorotN(1.0)))
+		bias = NewTensor(g, dt, dims, WithShape(s...), WithName(x.Name()+"_β"), WithInit(Zeroes()))
+	} else {
+		if !bias.Shape().Eq(s) {
+			return nil, nil, nil, nil, errors.Wrap(errors.Errorf(shapeMismatch, s, bias.Shape()), "invalid bias")
+		}
 	}
 
 	if retVal, err = ApplyOp(op, x); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if retVal, err = HadamardProd(scale, retVal); err != nil {
+
+	b := make([]byte, 0, x.Dims()-1)
+	for i := range x.Shape() {
+		if i != channelDim {
+			b = append(b, byte(i))
+		}
+	}
+
+	if retVal, err = BroadcastHadamardProd(retVal, scale, nil, b); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	retVal, err = Add(retVal, bias)
+	retVal, err = BroadcastAdd(retVal, bias, nil, b)
 
 	return retVal, scale, bias, op, err
 }
