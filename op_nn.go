@@ -1228,14 +1228,13 @@ func (op *BatchNormOp) UsePreallocDo(prealloc Value, inputs ...Value) (retVal Va
 	return prealloc, err
 }
 
-// SetTraining configure the op for training mode.
-// A call to this function implicitly calls the Reset() method
-func (op *BatchNormOp) SetTraining() { op.Reset(); op.training = true }
+// SetTraining configures the op for training mode
+func (op *BatchNormOp) SetTraining() { op.training = true }
 
-// SetTesting configure the op for testing mode
+// SetTesting configures the op for testing mode
 func (op *BatchNormOp) SetTesting() { op.training = false }
 
-// Reset the operator by zeroing the internals scratch spaces
+// Reset the operator by zeroing the internal scratch spaces
 func (op *BatchNormOp) Reset() error {
 	dt := op.scaleFactor.Dtype()
 	var uno interface{}
