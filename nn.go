@@ -392,7 +392,7 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 	varianceTmp := tensor.New(tensor.Of(dt), tensor.WithShape(channels))
 	tmp := tensor.New(tensor.Of(dt), tensor.WithShape(x.Shape().Clone()...))
 	xNorm := tensor.New(tensor.Of(dt), tensor.WithShape(x.Shape().Clone()...))
-	batchSumMultiplier := tensor.New(tensor.Of(dt), tensor.WithShape(batches))
+	numByChans := tensor.New(tensor.Of(dt), tensor.WithShape(channels*batches))
 
 	var uno interface{}
 	switch dt {
@@ -406,7 +406,7 @@ func BatchNorm(x, scale, bias *Node, momentum, epsilon float64) (retVal, γ, β 
 		return nil, nil, nil, nil, err
 	}
 
-	numByChans := tensor.New(tensor.Of(dt), tensor.WithShape(channels*batches))
+	batchSumMultiplier := tensor.New(tensor.Of(dt), tensor.WithShape(batches))
 	if err = batchSumMultiplier.Memset(uno); err != nil {
 		return nil, nil, nil, nil, err
 	}
