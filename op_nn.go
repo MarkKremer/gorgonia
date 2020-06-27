@@ -1288,10 +1288,7 @@ func (op *BatchNormOp) f64s(input, output *tensor.Dense) (err error) {
 
 	if !op.training {
 		// use stored mean/variance estimates
-		scaleFactor := float64(1)
-		if fst := op.scaleFactor.Float64s()[0]; fst != 1 {
-			scaleFactor = fst
-		}
+		scaleFactor := op.scaleFactor.Float64s()[0]
 		copy(meanTmp, mean)
 		whichblas.Dscal(len(meanTmp), scaleFactor, meanTmp, 1)
 		copy(varianceTmp, variance)
@@ -1369,10 +1366,7 @@ func (op *BatchNormOp) f32s(input, output *tensor.Dense) (err error) {
 
 	if !op.training {
 		// use stored mean/variance estimates
-		scaleFactor := float32(1)
-		if fst := op.scaleFactor.Float32s()[0]; fst != 1 {
-			scaleFactor = fst
-		}
+		scaleFactor := op.scaleFactor.Float32s()[0]
 		copy(meanTmp, mean)
 		whichblas.Sscal(len(meanTmp), scaleFactor, meanTmp, 1)
 		copy(varianceTmp, variance)
